@@ -103,11 +103,10 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	event RewardClaimed(address indexed user, address indexed rewardsToken, uint256 reward);
 
 	/**
-	 * @notice Emitted when a token's whitelist status is updated.
+	 * @notice Emitted when a token is added as reward token.
 	 * @param token The token address.
-	 * @param whitelist The new whitelist status.
 	 */
-	event UpdateWhitelist(address indexed token, bool whitelist);
+	event AddRewardToken(address indexed token);
 
 	/**
 	 * @notice Emitted when admin rescue tokens.
@@ -174,6 +173,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		_grantRole(REWARD_MANAGER_ROLE, admin);
 		_grantRole(PAUSER_ROLE, admin);
 		_grantRole(UNPAUSER_ROLE, admin);
+		_grantRole(REWARD_NOTIFIER_ROLE, admin);
 	}
 
 	//--------------------------------------------------------------------------
@@ -238,10 +238,20 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param _rewardsToken The reward token address.
 	 * @return The amount of earned rewards.
 	 */
-	function earned(address account, address _rewardsToken) public view returns (uint256) {
+	function _earned(address account, address _rewardsToken) internal view returns (uint256) {
 		return
 			((balanceOf[account] * (rewardPerToken(_rewardsToken) - userRewardPerTokenPaid[account][_rewardsToken])) / 1e18) +
 			rewards[account][_rewardsToken];
+	}
+
+	/**
+	 * @notice Calculates the earned rewards for an account and a specific reward token.
+	 * @param account The user address.
+	 * @param _rewardsToken The reward token address.
+	 * @return The amount of earned rewards.
+	 */
+	function earned(address account, address _rewardsToken) external view returns (uint256) {
+		return _earned(account, _rewardsToken) / getScalingFactor(_rewardsToken);
 	}
 
 	/**
@@ -474,7 +484,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			state.lastUpdated = lastTimeRewardApplicable(token);
 
 			if (account != address(0)) {
-				rewards[account][token] = earned(account, token);
+				rewards[account][token] = _earned(account, token);
 				userRewardPerTokenPaid[account][token] = state.perTokenStored;
 			}
 			unchecked {
